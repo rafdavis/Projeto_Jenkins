@@ -56,7 +56,7 @@ async def scare():
 async def lookalike():
     lookalike_images = [
         "https://randomuser.me/api/portraits/men/1.jpg",
-        "https://randomuser.me/api/portraits/women/1.jpg",
+        "https://randomuser.me/api/portraits/women/2.jpg",
         "https://randomuser.me/api/portraits/lego/1.jpg"
     ]
     random_lookalike = random.choice(lookalike_images)
