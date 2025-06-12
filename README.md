@@ -108,11 +108,41 @@ echo "deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] https://pkg.jenkin
 sudo apt update && sudo apt install jenkins -y
 ```
 
-- 5. Com o Jenkins instalado, visualize a senha inicial com o seguinte comando:
+### Configurando o Jenkins
+
+- 1. Com o Jenkins instalado, visualize a senha inicial com o seguinte comando:
 
 ```
 sudo cat /var/lib/jenkins/secrets/initialAdminPassword
 ```
+
+- 2. Confira o Jenkins rodando localmente e cole a senha copiada:
+
+``
+http://localhost:8080
+``
+
+![](imgs/jenkinsLogin.png)
+
+- 3. Selecione `Instalar as extensões sugeridas`:
+
+![](imgs/customizaçãoJenkins.png)
+
+- 4. Aguarde a instalação das extensões:
+
+![](imgs/extensaoJenkins.png)
+
+- 5. Criação do seu usuário Jenkins:
+
+![](imgs/usuarioJenkins.png)
+
+- 6. Mantenha a url padrão:
+
+![](imgs/urlJenkins.png)
+
+- 7. Configuração Finalizada:
+
+![](imgs/finishJenkins.png)
 
 ### Docker Desktop:
 
@@ -162,3 +192,186 @@ kubectl get svc
 ```
 
 ![](imgs/clusterLocal.png)
+
+## Validar execução local do uvicorn:
+
+### Com a aplicação backend no seu repositório:
+
+- Entre na pasta do repositório, baixe as dependências do requirements e rode o projeto:
+
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### A aplicação não possue um frontend, então verique se ela está rodando por meio da rota `/docs`:
+
+![](imgs/swagger.png)
+
+### Selecione uma rota e teste a execução:
+
+![](imgs/testeSwagger.png)
+![](imgs/executandoSwagger.png)
+
+### Verique se retornou uma cor:
+
+![](imgs/color.png)
+
+## Estrutura Sugerida para o Projeto:
+
+```
+Projeto_Jenkins/
+├── backend/
+│   ├── main.py
+│   ├── requirements.txt
+│   └── Dockerfile
+│
+├── k8s/
+│   ├── deployment.yaml
+│   └── service.yaml
+│
+└── Jenkinsfile
+```
+
+
+## Etapa 2: Conteinerização com Docker
+
+### Criação do Dockerfile e publicação do container no Docker Hub:
+
+- 1. Dentro da pasta backend crie o seguinte Dockerfile:
+
+```
+FROM python:alpine
+WORKDIR /backend
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+EXPOSE 8000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+- 2. Após a criação, construa a imagem Docker com o seu usuário do Docker Hub:
+
+```
+docker build -t usuario/fastapi .
+```
+
+![](imgs/dockerBuild.png)
+
+- 3. Com a construção feita, suba a imagem para o Docker Hub:
+
+```
+docker push usuario/fastapi
+```
+
+![](imgs/dockerPush.png)
+
+- 4. Confira no Docker Hub se o repositório foi criado com a imagem: 
+
+![](imgs/repositorioDockerHub.png)
+
+## Etapa 3: Arquivos Deployment e Service no Kubernetes local:
+
+### Criação do yaml de Deployment e Service e aplicá-lo no cluster local:
+
+- 1. Crie uma pasta `k8s` e dentro dela crie os seguintes arquivos:
+
+### deployment.yaml:
+
+```
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fast-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: fast-api
+  template:
+    metadata:
+      labels:
+        app: fast-api
+    spec:
+      containers:
+        - name: fast-api
+          image: usuario/fastapi
+          ports:
+            - containerPort: 8000
+```
+
+### service.yaml:
+
+```
+apiVersion: v1
+kind: Service
+metadata:
+  name: fast-api
+spec:
+  type: NodePort
+  ports:
+    - port: 80
+      targetPort: 8000
+      nodePort: 30001
+  selector:
+    app: fast-api
+``` 
+
+### Com os arquivos criados e o cluster rodando localmente siga os passos:
+
+- 1. Dentro da pasta `k8s` execute o comando:
+
+```
+kubectl apply -f . 
+```
+
+![](imgs/createDeploy.png)
+
+- 2. Confira se o Deployment e Service foram criados: 
+
+```
+kubectl get deploy,svc
+```
+
+![](imgs/getYaml.png)
+
+- 3. Com o Deployment e Service criados, crie uma `url` para a aplicação:
+
+```
+minikube service fast-api --url
+```
+
+![](imgs/serviceUrl.png)
+
+- 4. Copie o url e entre na rota `/docs` novamente:
+
+![](imgs/swaggerKubernetes.png)
+
+## Etapa 4: Jenkins - Build e Push:
+
+### Criação do Jenkinsfile:
+
+```
+pipeline {
+    agent any
+
+    stages {
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    dockerbuild = docker.build("rafdavis/fastapi:${env.BUILD_ID}", '-f ./backend/Dockerfile ./backend')
+                }
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    docker.withRegistry('https://registry.hub.docker.com', 'dockerhub') {
+                        dockerbuild.push('latest')
+                        dockerbuild.push("${env.BUILD_ID}")}
+                }
+            }
+        }
+```
