@@ -615,12 +615,88 @@ cat ~/.kube/config
 
 <br>
 
-  - Kind: `Secretfile`
-  - Scope: `Global`
-  - File: `Selecione o arquivo config`
-  - ID: `O mesmo utilizado no Jenkinsfile`
+- Kind: `Secretfile`
+- Scope: `Global`
+- File: `Selecione o arquivo config`
+- ID: `O mesmo utilizado no Jenkinsfile`
 
 ![](imgs/kubeconfigCredential.png)
 
-### De um git push e verifique se o kubernetes foi criado:
+### De um `git push` e verifique se o `Kubernetes` e a `imagem no Docker Hub` foram criadas:
 
+![](imgs/deployWebhook.png)
+![](imgs/pushWebhook2.png)
+
+## Etapa Bônus:
+
+### Escanear as vulnerabilidades na imagem Docker utilizando Trivy:
+
+- 1. Instale o Trivy:
+
+```
+sudo apt install wget -y
+wget https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.50.2_Linux-64bit.deb
+sudo dpkg -i trivy_0.50.2_Linux-64bit.deb
+```
+
+- 2. Verifique se foi instalado:
+
+```
+trivy --version
+```
+
+### Atualize o Jenkinsfile com o stage de escaneamento da imagem Docker:
+
+```
+pipeline {
+    agent any
+
+    stages {
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    dockerbuild = docker.build("rafdavis/fastapi:${env.BUILD_ID}", '-f ./backend/Dockerfile ./backend')
+                }
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    docker.withRegistry('https://registry.hub.docker.com', 'dockerhub') {
+                        dockerbuild.push('latest')
+                        dockerbuild.push("${env.BUILD_ID}")}
+                }
+            }
+        }
+
+        stage('Scan Docker Image') {
+            steps {
+                script {
+                    def trivyOutput = sh(script: "trivy image $APP_NAME:latest", returnStdout: true).trim()
+                    println trivyOutput
+                    if (trivyOutput.contains("Total: 0")) {
+                        echo "Não foram encontradas vulnerabilidades nessa Imagem Docker"
+                    } else {
+                        echo "Foram encontradas vulnerabilidades nessa Imagem Docker"
+                    }
+                }
+            }
+        }
+
+        stage('Deploy no Kubernetes') {
+            environment {
+                tag_version = "${env.BUILD_ID}"
+            }
+            steps {
+                script {
+                    withKubeConfig([credentialsId: 'kubeconfig']) {
+                        sh "sed -i 's/{{tag}}/${tag_version}/g' ./k8s/deployment.yaml"
+                        sh 'kubectl apply -f ./k8s/'
+                    }
+                }
+            }
+        }
+    }
+}
+```

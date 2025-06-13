@@ -20,6 +20,20 @@ pipeline {
             }
         }
 
+        stage('Scan Docker Image') {
+            steps {
+                script {
+                    def trivyOutput = sh(script: "trivy image $APP_NAME:latest", returnStdout: true).trim()
+                    println trivyOutput
+                    if (trivyOutput.contains("Total: 0")) {
+                        echo "Não foram encontradas vulnerabilidades nessa Imagem Docker"
+                    } else {
+                        echo "Foram encontradas vulnerabilidades nessa Imagem Docker"
+                    }
+                }
+            }
+        }
+
         stage('Deploy no Kubernetes') {
             environment {
                 tag_version = "${env.BUILD_ID}"
