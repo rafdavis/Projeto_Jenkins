@@ -524,7 +524,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    dockerbuild = docker.build("rafdavis/fastapi:${env.BUILD_ID}", '-f ./backend/Dockerfile ./backend')
+                    dockerbuild = docker.build("usuario/fastapi:${env.BUILD_ID}", '-f ./backend/Dockerfile ./backend')
                 }
             }
         }
@@ -655,7 +655,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    dockerbuild = docker.build("rafdavis/fastapi:${env.BUILD_ID}", '-f ./backend/Dockerfile ./backend')
+                    dockerbuild = docker.build("usuario/fastapi:${env.BUILD_ID}", '-f ./backend/Dockerfile ./backend')
                 }
             }
         }
@@ -673,16 +673,21 @@ pipeline {
         stage('Scan Docker Image') {
             steps {
                 script {
-                    def trivyOutput = sh(script: "trivy image $APP_NAME:latest", returnStdout: true).trim()
-                    println trivyOutput
-                    if (trivyOutput.contains("Total: 0")) {
-                        echo "Não foram encontradas vulnerabilidades nessa Imagem Docker"
-                    } else {
-                        echo "Foram encontradas vulnerabilidades nessa Imagem Docker"
+                    def imageName = "usuario/fastapi:latest"
+                
+                echo "Escaneando imagem com Trivy: ${imageName}"
+                def trivyOutput = sh(script: "trivy image --exit-code 1 --severity CRITICAL,HIGH ${imageName}", returnStatus: true)
+
+                if (trivyOutput == 0) {
+                    echo "✅ Sem vulnerabilidades críticas ou altas na imagem Docker"
+                } else {
+                    echo "❌ Vulnerabilidades CRÍTICAS ou ALTAS foram encontradas!"
+                    error("Falha de segurança detectada pela varredura do Trivy")
                     }
                 }
             }
         }
+
 
         stage('Deploy no Kubernetes') {
             environment {
