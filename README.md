@@ -705,3 +705,9 @@ pipeline {
     }
 }
 ```
+### De um push e verifique se foi escaneado em `nome-tarefa -> Número da execução -> Console Output:
+
+
+![](imgs/consoleTrivy.png)
+![](imgs/trivyData.png)
+![](imgs/trivyScan.png)
