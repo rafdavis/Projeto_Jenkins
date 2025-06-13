@@ -350,8 +350,28 @@ minikube service fast-api --url
 
 ## Etapa 4: Jenkins - Build e Push:
 
+### Antes da criação da pipeline é necessário a instalação de Plugins:
+
+- 1. Em `Painel de Controle -> Gerenciar Jenkins`:
+
+![](imgs/configJenkins.png)
+
+- 2. Selecione `Plugins -> Extensões disponíveis`:
+
+![](imgs/pluginsJenkins.png)
+
+- 3. Selecione `Docker`, `Docker Pipeline` e `Kubernetes CLI`:
+
+![](imgs/selecaoPlugins.png)
+
+- 4. Aguarde a instalação dos Plugins:
+
+![](imgs/pluginDownload.png)
+![](imgs/restartJenkins.png)
+
 ### Criação do Jenkinsfile:
 
+- Crie um Arquivo `Jenkinsfile`:
 ```
 pipeline {
     agent any
@@ -360,7 +380,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    dockerbuild = docker.build("rafdavis/fastapi:${env.BUILD_ID}", '-f ./backend/Dockerfile ./backend')
+                    dockerbuild = docker.build("user/fastapi:${env.BUILD_ID}", '-f ./backend/Dockerfile ./backend')
                 }
             }
         }
@@ -375,3 +395,65 @@ pipeline {
             }
         }
 ```
+
+### Criação de tarefa no Jenkins:
+
+- 1. Dentro do Jenkins, selecione `nova tarefa`:
+
+![](imgs/newTaskJenkins.png)
+
+- 2. Nomeie a tarefa e selecione pipeline:
+
+![](imgs/itemTypeJenkins.png)
+
+- 3. Na parte de Pipeline, selecione:
+
+<br>
+
+  - Definição: `Pipeline script from SCM`
+  - Repository URL: O link do seu repositório
+  - Branch Specifier: `*/main`
+  - Script Path: `Jenkinsfile`
+
+![](imgs/pipelineGit.png)
+![](imgs/pipelineGit2.png)
+
+### Criação de Credencial:
+
+### Docker Hub:
+
+- 1. Selecione `Painel de Controle -> Gerenciar Jenkins -> Credentials`
+
+![](imgs/credentialsJenkins.png)
+
+- 2. Selecione o escopo `Global` e `Add Credentials`:
+
+![](imgs/scopeCredentials.png)
+![](imgs/createCredentials.png)
+
+- 3. Preencha os campos:
+
+<br>
+
+  - Kind: `Username with password`
+  - Scope: `Global`
+  - Username: `Usuário do Docker Hub`
+  - Password: `Senha do Docker Hub`
+  - ID: `O mesmo utilizado no Jenkinsfile`
+
+![](imgs/userCredentials.png)
+
+### Execução de Tarefa no Jenkins:
+
+- 1. Selecione `Painel de Controle -> nome-tarefa -> Contruir Agora`:
+
+![](imgs/taskBuild.png)
+
+- 2. Com a execução bem sucedida, confira se a imagem foi criada no Docker Hub:
+
+![](imgs/sucessBuild.png)
+![](imgs/pushImage.png)
+
+### Automatização da pipeline pelo git push:
+
+- 1. Em `Painel de Control -> nome-tarefa -> Configurar
