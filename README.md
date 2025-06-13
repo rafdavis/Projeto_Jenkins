@@ -118,9 +118,7 @@ sudo cat /var/lib/jenkins/secrets/initialAdminPassword
 
 - 2. Confira o Jenkins rodando localmente e cole a senha copiada:
 
-``
-http://localhost:8080
-``
+`http://localhost:8080`
 
 ![](imgs/jenkinsLogin.png)
 
@@ -234,7 +232,6 @@ Projeto_Jenkins/
 └── Jenkinsfile
 ```
 
-
 ## Etapa 2: Conteinerização com Docker
 
 ### Criação do Dockerfile e publicação do container no Docker Hub:
@@ -267,7 +264,7 @@ docker push usuario/fastapi
 
 ![](imgs/dockerPush.png)
 
-- 4. Confira no Docker Hub se o repositório foi criado com a imagem: 
+- 4. Confira no Docker Hub se o repositório foi criado com a imagem:
 
 ![](imgs/repositorioDockerHub.png)
 
@@ -316,19 +313,19 @@ spec:
       nodePort: 30001
   selector:
     app: fast-api
-``` 
+```
 
 ### Com os arquivos criados e o cluster rodando localmente siga os passos:
 
 - 1. Dentro da pasta `k8s` execute o comando:
 
 ```
-kubectl apply -f . 
+kubectl apply -f .
 ```
 
 ![](imgs/createDeploy.png)
 
-- 2. Confira se o Deployment e Service foram criados: 
+- 2. Confira se o Deployment e Service foram criados:
 
 ```
 kubectl get deploy,svc
@@ -372,6 +369,7 @@ minikube service fast-api --url
 ### Criação do Jenkinsfile:
 
 - Crie um Arquivo `Jenkinsfile`:
+
 ```
 pipeline {
     agent any
@@ -410,17 +408,15 @@ pipeline {
 
 <br>
 
-  - Definição: `Pipeline script from SCM`
-  - Repository URL: O link do seu repositório
-  - Branch Specifier: `*/main`
-  - Script Path: `Jenkinsfile`
+- Definição: `Pipeline script from SCM`
+- Repository URL: O link do seu repositório
+- Branch Specifier: `*/main`
+- Script Path: `Jenkinsfile`
 
 ![](imgs/pipelineGit.png)
 ![](imgs/pipelineGit2.png)
 
-### Criação de Credencial:
-
-### Docker Hub:
+### Criação de Credencial para acessar o Docker Hub:
 
 - 1. Selecione `Painel de Controle -> Gerenciar Jenkins -> Credentials`
 
@@ -435,11 +431,11 @@ pipeline {
 
 <br>
 
-  - Kind: `Username with password`
-  - Scope: `Global`
-  - Username: `Usuário do Docker Hub`
-  - Password: `Senha do Docker Hub`
-  - ID: `O mesmo utilizado no Jenkinsfile`
+- Kind: `Username with password`
+- Scope: `Global`
+- Username: `Usuário do Docker Hub`
+- Password: `Senha do Docker Hub`
+- ID: `O mesmo utilizado no Jenkinsfile`
 
 ![](imgs/userCredentials.png)
 
@@ -456,4 +452,175 @@ pipeline {
 
 ### Automatização da pipeline pelo git push:
 
-- 1. Em `Painel de Control -> nome-tarefa -> Configurar
+### Para exibir o url para acesso público precisamos do `ngrok`:
+
+- 1. Instalando via apt:
+
+```
+curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc \
+  | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null \
+  && echo "deb https://ngrok-agent.s3.amazonaws.com buster main" \
+  | sudo tee /etc/apt/sources.list.d/ngrok.list \
+  && sudo apt update \
+  && sudo apt install ngrok
+```
+
+- 2. Crie conta gratuita no site:
+
+`https://dashboard.ngrok.com/signup`
+
+- 3. Depois de criar a conta, acesse e copie o código com o token e cole no terminal:
+
+`https://dashboard.ngrok.com/get-started/your-authtoken`
+
+![](imgs/ngrokToken.png)
+
+- 4. Com a autenticação feita digite o comando:
+
+```
+ngrok http 8080
+```
+
+![](imgs/ngrokHttp.png)
+
+### Criação do WebHook
+
+- 1. Em `Painel de Control -> nome-tarefa -> Configurar -> Trigger` habilite a opção:
+
+![](imgs/triggerGitHub.png)
+
+- 2. No repositório do GitHub selecione `Configurações -> Webhooks`:
+
+![](imgs/webhook.png)
+
+- 3. Crie o Webhook:
+
+![](imgs/addWebhook.png)
+
+- 4. Cole o url do `ngrok` e adicione `/github-webhook/`:
+
+![](imgs/configWebhook.png)
+
+### Testando o Webhook:
+
+- Com as configurações feitas, de um git push e veja se ele disparou a pipeline:
+
+![](imgs/sucessWebhook.png)
+![](imgs/buildWebhook.png)
+
+- Confira no Docker Hub a imagem feita:
+
+![](imgs/pushWebhook.png)
+
+## Etapa 5: Deploy no Kubernetes:
+
+### No Jenkinsfile adicione o stage de Deploy no Kubernetes local:
+
+```
+pipeline {
+    agent any
+
+    stages {
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    dockerbuild = docker.build("rafdavis/fastapi:${env.BUILD_ID}", '-f ./backend/Dockerfile ./backend')
+                }
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    docker.withRegistry('https://registry.hub.docker.com', 'dockerhub') {
+                        dockerbuild.push('latest')
+                        dockerbuild.push("${env.BUILD_ID}")}
+                }
+            }
+        }
+
+        stage('Deploy no Kubernetes') {
+            environment {
+                tag_version = "${env.BUILD_ID}"
+            }
+            steps {
+                script {
+                    withKubeConfig([credentialsId: 'kubeconfig']) {
+                        sh "sed -i 's/{{tag}}/${tag_version}/g' ./k8s/deployment.yaml"
+                        sh 'kubectl apply -f ./k8s/'
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+### Adicione a tag no Deployment:
+
+```
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fast-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: fast-api
+  template:
+    metadata:
+      labels:
+        app: fast-api
+    spec:
+      containers:
+        - name: fast-api
+          image: usuario/fastapi:{{tag}}
+          ports:
+            - containerPort: 8000
+```
+
+### Iniciar o cluster local no usuário Jenkins:
+
+- 1. Acesse o usuário Jenkins:
+
+```
+sudo su - jenkins
+```
+
+- 2. Inicie o cluster local:
+
+```
+minikube start
+```
+
+- 3. Copie o arquivo config:
+
+```
+cat ~/.kube/config
+```
+
+### Criação de Credencial para acessar o cluster local:
+
+- 1. Selecione `Painel de Controle -> Gerenciar Jenkins -> Credentials`
+
+![](imgs/credentialsJenkins.png)
+
+- 2. Selecione o escopo `Global` e `Add Credentials`:
+
+![](imgs/scopeCredentials.png)
+![](imgs/createCredentials.png)
+
+- 3. Preencha os seguintes campos:
+
+<br>
+
+  - Kind: `Secretfile`
+  - Scope: `Global`
+  - File: `Selecione o arquivo config`
+  - ID: `O mesmo utilizado no Jenkinsfile`
+
+![](imgs/kubeconfigCredential.png)
+
+### De um git push e verifique se o kubernetes foi criado:
+
